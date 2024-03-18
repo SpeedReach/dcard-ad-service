@@ -10,6 +10,7 @@ import (
 )
 
 func NewServer(config infra.Config) *http.ServeMux {
+	//initializing resources
 	resourceMiddleware := infra.NewResourceMiddleware(config)
 	logger, err := zap.NewProduction()
 	if err != nil {
@@ -17,11 +18,14 @@ func NewServer(config infra.Config) *http.ServeMux {
 	}
 	loggerMiddleware := logging.LoggerMiddleware{Logger: logger}
 
+	//inject resources into handlers
 	var middlewares = func(next http.Handler) http.Handler {
 		return resourceMiddleware.Middleware(loggerMiddleware.Middleware(next))
 	}
 
+	//initializing server
 	mux := http.NewServeMux()
+	//registering handlers
 	mux.Handle("/ad", middlewares(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		switch request.Method {
 		case http.MethodPost:

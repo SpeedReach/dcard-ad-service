@@ -124,7 +124,7 @@ func extractConditionParams(req GetAdsRequest) models.ConditionParams {
 	}
 }
 
-// helper function for parsing request
+// ParseGetAdsRequest helper function for parsing request
 func ParseGetAdsRequest(request *http.Request) (GetAdsRequest, error) {
 	offsetStr := request.URL.Query().Get("offset")
 	limitStr := request.URL.Query().Get("limit")
