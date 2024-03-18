@@ -24,10 +24,10 @@ func TestGetAds(t *testing.T) {
 	for _, req := range requests {
 		postAd(t, server, req)
 	}
-	getAds(t, server, "/ad?limit=1000&offset=0&age=24&gender=F&country=TW&platform=ios")
+	getAds(t, server, "/api/v1/ad?limit=1000&offset=0&age=24&gender=F&country=TW&platform=ios")
 
 	//get second time uses cache, so need additional testing
-	getAds(t, server, "/ad?limit=1000&offset=0&age=24&gender=M&country=JP&platform=web")
+	getAds(t, server, "/api/v1/ad?limit=1000&offset=0&age=24&gender=M&country=JP&platform=web")
 }
 
 func getAds(t *testing.T, server *http.ServeMux, url string) {

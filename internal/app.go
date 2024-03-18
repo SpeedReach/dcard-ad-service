@@ -26,7 +26,7 @@ func NewServer(config infra.Config) *http.ServeMux {
 	//initializing server
 	mux := http.NewServeMux()
 	//registering handlers
-	mux.Handle("/ad", middlewares(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	mux.Handle("/api/v1/ad", middlewares(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		switch request.Method {
 		case http.MethodPost:
 			handlers.PostAdHandler(writer, request)
