@@ -24,12 +24,15 @@ func TestGetAds(t *testing.T) {
 	for _, req := range requests {
 		postAd(t, server, req)
 	}
-	getAds(t, server)
+	getAds(t, server, "/ad?limit=1000&offset=0&age=24&gender=F&country=TW&platform=ios")
+
+	//get second time uses cache, so need additional testing
+	getAds(t, server, "/ad?limit=1000&offset=0&age=24&gender=M&country=JP&platform=web")
 }
 
-func getAds(t *testing.T, server *http.ServeMux) {
+func getAds(t *testing.T, server *http.ServeMux, url string) {
 	//get ads
-	request, err := http.NewRequest(http.MethodGet, "/ad?limit=10&offset=0&age=24&gender=F&country=TW&platform=ios", nil)
+	request, err := http.NewRequest(http.MethodGet, url, nil)
 	assert.NoError(t, err)
 	response := httptest.NewRecorder()
 	server.ServeHTTP(response, request)

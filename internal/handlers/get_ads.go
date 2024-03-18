@@ -27,7 +27,8 @@ type GetAdsRequest struct {
 
 type GetAdsResponse struct {
 	Items []item `json:"items"`
-	End   bool   `json:"end"`
+	//if there are no more active ads
+	End bool `json:"end"`
 }
 
 type item struct {
