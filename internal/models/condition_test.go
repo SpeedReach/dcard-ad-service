@@ -33,6 +33,7 @@ func TestCondition_Match(t *testing.T) {
 		Platform: []Platform{Ios},
 		Gender:   []Gender{Male, Female},
 	}
+
 	assert.True(t, cond1.Match(params1))
 	assert.False(t, cond1.Match(params2))
 	assert.False(t, cond2.Match(params1))

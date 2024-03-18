@@ -1,11 +1,15 @@
 package handlers
 
 import (
-	"advertise_service/internal/cache"
+	"advertise_service/internal/infra"
+	"advertise_service/internal/infra/cache"
+	"advertise_service/internal/infra/logging"
+	"advertise_service/internal/infra/persistent"
 	"advertise_service/internal/models"
 	"context"
 	"encoding/json"
 	"errors"
+	"go.uber.org/zap"
 	"log"
 	"net/http"
 	"strconv"
@@ -22,8 +26,8 @@ type GetAdsRequest struct {
 }
 
 type GetAdsResponse struct {
-	Cursor int    `json:"cursor"`
-	Items  []item `json:"items"`
+	Items []item `json:"items"`
+	End   bool   `json:"end"`
 }
 
 type item struct {
@@ -32,9 +36,10 @@ type item struct {
 	EndAt time.Time `json:"endAt"`
 }
 
-func GetAds(writer http.ResponseWriter, request *http.Request) {
-	reqParams, err := parseGetAds(request)
+func GetAdsHandler(writer http.ResponseWriter, request *http.Request) {
+	reqParams, err := ParseGetAdsRequest(request)
 	if err != nil {
+		logging.ContextualLog(request.Context(), zap.ErrorLevel, "bad request", zap.Error(err))
 		http.Error(writer, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -42,6 +47,7 @@ func GetAds(writer http.ResponseWriter, request *http.Request) {
 
 	response, err := fetchMatched(request.Context(), reqParams, conditionParams)
 	if err != nil {
+		logging.ContextualLog(request.Context(), zap.ErrorLevel, "error fetching matched ads", zap.Error(err))
 		http.Error(writer, "Internal Error", http.StatusInternalServerError)
 		return
 	}
@@ -54,38 +60,28 @@ func GetAds(writer http.ResponseWriter, request *http.Request) {
 	}
 }
 
-// continuously fetch matched active ads from cache until we have enough or there are no more ads
+// logic
 func fetchMatched(ctx context.Context, reqParams GetAdsRequest, conditionParams models.ConditionParams) (GetAdsResponse, error) {
-	matchedAds := make([]models.Ad, reqParams.Limit)
+	cacheService := ctx.Value(infra.CacheContextKey{}).(cache.Service)
+	db := ctx.Value(infra.DatabaseContextKey{}).(persistent.Database)
+
+	activeAds, err := getActiveAdsCacheAside(ctx, cacheService, db, reqParams.Offset, reqParams.Limit)
+	if err != nil {
+		return GetAdsResponse{}, err
+	}
+
 	matched := 0
-	cursor := reqParams.Offset
-	for matched < reqParams.Limit {
-		count := reqParams.Limit - matched
-		ads, err := cache.GetActiveAds(ctx, cursor, count)
-		cursor += len(ads)
-
-		if err != nil {
-			log.Printf("error getting ads: %v", err)
-			return GetAdsResponse{}, err
-		}
-		for _, ad := range ads {
-			for _, condition := range ad.Conditions {
-				if condition.Match(conditionParams) {
-					matchedAds[matched] = ad
-					matched++
-					break
-				}
-			}
-		}
-
-		if len(ads) < count {
-			break
+	matchedAds := make([]models.Ad, 0)
+	for _, ad := range activeAds {
+		if ad.ShouldShow(conditionParams) {
+			matched++
+			matchedAds = append(matchedAds, ad)
 		}
 	}
 
 	response := GetAdsResponse{
-		Cursor: cursor,
-		Items:  make([]item, matched),
+		Items: make([]item, matched),
+		End:   len(activeAds) < reqParams.Limit,
 	}
 
 	for i, ad := range matchedAds {
@@ -99,6 +95,25 @@ func fetchMatched(ctx context.Context, reqParams GetAdsRequest, conditionParams 
 	return response, nil
 }
 
+// get active ads with cache aside method
+func getActiveAdsCacheAside(ctx context.Context, cacheService cache.Service, db persistent.Database, skip int, count int) ([]models.Ad, error) {
+	valid, err := cacheService.CheckCacheValid(ctx)
+	if err != nil {
+		return []models.Ad{}, err
+	}
+
+	if !valid {
+		ads, err := db.FindAdsWithTime(ctx, time.Now().Add(80*time.Minute), time.Now())
+		if err != nil {
+			return []models.Ad{}, err
+		}
+		err = cacheService.WriteActiveAds(ctx, ads)
+		return ads, err
+	}
+
+	return cacheService.GetActiveAds(ctx, skip, count)
+}
+
 // helper function for parsing request
 func extractConditionParams(req GetAdsRequest) models.ConditionParams {
 	return models.ConditionParams{
@@ -110,7 +125,7 @@ func extractConditionParams(req GetAdsRequest) models.ConditionParams {
 }
 
 // helper function for parsing request
-func parseGetAds(request *http.Request) (GetAdsRequest, error) {
+func ParseGetAdsRequest(request *http.Request) (GetAdsRequest, error) {
 	offsetStr := request.URL.Query().Get("offset")
 	limitStr := request.URL.Query().Get("limit")
 	ageStr := request.URL.Query().Get("age")
@@ -118,17 +133,21 @@ func parseGetAds(request *http.Request) (GetAdsRequest, error) {
 	country := models.Country(request.URL.Query().Get("country"))
 	platform := models.Platform(request.URL.Query().Get("platform"))
 	offset, err := strconv.Atoi(offsetStr)
-	if err != nil {
-		return GetAdsRequest{}, err
+	if err != nil || offset < 0 {
+		offset = 0
 	}
 	limit, err := strconv.Atoi(limitStr)
-	if err != nil {
-		return GetAdsRequest{}, err
+	if err != nil || limit < 0 {
+		limit = 5
 	}
 	age, err := strconv.Atoi(ageStr)
 	if err != nil {
 		return GetAdsRequest{}, err
 	}
+	if age < 0 {
+		return GetAdsRequest{}, errors.New("age cannot be negative")
+	}
+
 	if !models.ValidCountry(country) {
 		return GetAdsRequest{}, errors.New("invalid country")
 	}

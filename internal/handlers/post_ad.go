@@ -1,12 +1,16 @@
 package handlers
 
 import (
-	"advertise_service/internal/cache"
-	"advertise_service/internal/database"
+	"advertise_service/internal/infra"
+	"advertise_service/internal/infra/cache"
+	"advertise_service/internal/infra/logging"
+	"advertise_service/internal/infra/persistent"
 	"advertise_service/internal/models"
+	"context"
 	"encoding/json"
 	"errors"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 	"log"
 	"net/http"
 	"time"
@@ -26,7 +30,7 @@ type PostAdResponse struct {
 	AdID string
 }
 
-func PostAd(writer http.ResponseWriter, request *http.Request) {
+func PostAdHandler(writer http.ResponseWriter, request *http.Request) {
 	//parse request
 	reqBody := PostAdRequest{}
 	err := json.NewDecoder(request.Body).Decode(&reqBody)
@@ -42,7 +46,26 @@ func PostAd(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 
-	//insert db
+	response, err := postAd(request.Context(), reqBody)
+
+	if err != nil {
+		http.Error(writer, "Internal error", http.StatusInternalServerError)
+		return
+	}
+
+	//write response
+	writer.Header().Set("Content-Type", "application/json")
+	writer.WriteHeader(http.StatusCreated)
+	err = json.NewEncoder(writer).Encode(response)
+
+	if err != nil {
+		log.Printf("error encoding response: %v", err)
+		http.Error(writer, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+}
+
+func postAd(ctx context.Context, reqBody PostAdRequest) (PostAdResponse, error) {
 	ad := models.Ad{
 		ID:         uuid.New(),
 		Title:      reqBody.Title,
@@ -50,31 +73,24 @@ func PostAd(writer http.ResponseWriter, request *http.Request) {
 		EndAt:      reqBody.EndAt,
 		Conditions: reqBody.Conditions,
 	}
-	err = database.InsertAd(request.Context(), ad)
+	database := ctx.Value(infra.DatabaseContextKey{}).(persistent.Database)
+
+	err := database.InsertAd(ctx, ad)
 	if err != nil {
-		http.Error(writer, err.Error(), http.StatusInternalServerError)
-		return
+		return PostAdResponse{}, err
 	}
 
 	//store ad in cache if it's active the time that it's created
 	if ad.StartAt.Before(time.Now()) {
-		err := cache.StoreActiveAd(request.Context(), ad)
+		cacheService := ctx.Value(infra.CacheContextKey{}).(cache.Service)
+		err := cacheService.WriteActiveAd(ctx, ad)
 		if err != nil {
 			// It's ok that we failed to immediate cache the ad, scheduler will take care of it
-			log.Printf("error caching active ad: %v", err)
+			logging.ContextualLog(ctx, zap.ErrorLevel, "error caching active ad", zap.Error(err))
 		}
 	}
 
-	//write response
-	writer.Header().Set("Content-Type", "application/json")
-	writer.WriteHeader(http.StatusCreated)
-	err = json.NewEncoder(writer).Encode(PostAdResponse{AdID: ad.ID.String()})
-
-	if err != nil {
-		log.Printf("error encoding response: %v", err)
-		http.Error(writer, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
+	return PostAdResponse{AdID: ad.ID.String()}, nil
 }
 
 func validateRequest(reqBody PostAdRequest) error {

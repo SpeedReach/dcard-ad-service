@@ -1,17 +1,15 @@
 package models
 
 import (
-	"github.com/google/uuid"
 	"slices"
 )
 
 type Condition struct {
-	ConditionId uuid.UUID  `json:"conditionId"`
-	AgeStart    int        `json:"ageStart"`
-	AgeEnd      int        `json:"ageEnd"`
-	Country     []Country  `json:"country"`
-	Gender      []Gender   `json:"gender"`
-	Platform    []Platform `json:"platform"`
+	AgeStart int        `json:"ageStart"`
+	AgeEnd   int        `json:"ageEnd"`
+	Country  []Country  `json:"country"`
+	Gender   []Gender   `json:"gender"`
+	Platform []Platform `json:"platform"`
 }
 
 type ConditionParams struct {

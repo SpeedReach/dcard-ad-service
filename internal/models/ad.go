@@ -12,3 +12,17 @@ type Ad struct {
 	EndAt      time.Time   `json:"end_at"`
 	Conditions []Condition `json:"conditions"`
 }
+
+func (ad Ad) ShouldShow(params ConditionParams) bool {
+	for _, condition := range ad.Conditions {
+		if condition.Match(params) {
+			return true
+		}
+	}
+	return false
+}
+
+func (ad Ad) IsActive() bool {
+	now := time.Now()
+	return now.After(ad.StartAt) && now.Before(ad.EndAt)
+}

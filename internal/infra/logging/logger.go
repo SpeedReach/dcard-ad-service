@@ -34,6 +34,7 @@ func (m LoggerMiddleware) Middleware(next http.Handler) http.Handler {
 		}
 		start := time.Now()
 		next.ServeHTTP(w, r.WithContext(ctx))
+
 		fields = append(fields,
 			zap.Duration("latency", time.Since(start)),
 		)
@@ -43,7 +44,11 @@ func (m LoggerMiddleware) Middleware(next http.Handler) http.Handler {
 }
 
 func ContextualLog(ctx context.Context, lvl zapcore.Level, msg string, fields ...zap.Field) {
-	requestId := ctx.Value(RequestIdContextKey{}).(string)
 	logger := ctx.Value(LoggerContextKey{}).(*zap.Logger)
-	logger.Log(lvl, msg, append(fields, zap.String("requestId", requestId))...)
+	if ctx.Value(RequestIdContextKey{}) == nil {
+		logger.Log(lvl, msg, fields...)
+	} else {
+		requestId := ctx.Value(RequestIdContextKey{}).(string)
+		logger.With(zap.String("requestId", requestId)).Log(lvl, msg, fields...)
+	}
 }

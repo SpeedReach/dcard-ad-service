@@ -4,8 +4,8 @@ type Platform string
 
 const (
 	Android Platform = "android"
-	Ios              = "ios"
-	Web              = "web"
+	Ios     Platform = "ios"
+	Web     Platform = "web"
 )
 
 func ValidPlatform(platform Platform) bool {

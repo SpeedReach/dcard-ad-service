@@ -25,10 +25,10 @@ func NewServer(config infra.Config) *http.ServeMux {
 	mux.Handle("/ad", middlewares(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		switch request.Method {
 		case http.MethodPost:
-			handlers.PostAd(writer, request)
+			handlers.PostAdHandler(writer, request)
 			break
 		case http.MethodGet:
-			handlers.GetAds(writer, request)
+			handlers.GetAdsHandler(writer, request)
 		default:
 			http.NotFound(writer, request)
 		}
