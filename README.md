@@ -2,7 +2,9 @@
 
 This is a simple backend project for Dcard backend assignment.
 Spec: https://drive.google.com/file/d/1dnDiBDen7FrzOAJdKZMDJg479IC77_zT/view  
-The api implementation is exactly like the spec.
+
+# Api
+The api is exactly like the spec, except for the get ads, it returns a additional field `end`, indicates whether there are no more active ads.
 
 
 
