@@ -57,11 +57,11 @@ func getAds(t *testing.T, server *http.ServeMux, url string) {
 func postAd(t *testing.T, server *http.ServeMux, reqBody handlers.PostAdRequest) {
 	jsonStr, err := json.Marshal(reqBody)
 	assert.NoError(t, err)
-	request, err := http.NewRequest(http.MethodPost, "/ad", bytes.NewBuffer(jsonStr))
+	request, err := http.NewRequest(http.MethodPost, "/api/v1/ad", bytes.NewBuffer(jsonStr))
 	assert.NoError(t, err)
 	response := httptest.NewRecorder()
 	server.ServeHTTP(response, request)
-	assert.Equal(t, response.Code, http.StatusCreated, response.Body.String())
+	assert.Equal(t, http.StatusCreated, response.Code, response.Body.String())
 }
 
 func shouldShow(adTitle string, queryParams handlers.GetAdsRequest) bool {
