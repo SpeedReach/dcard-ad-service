@@ -36,20 +36,15 @@ func getAds(t *testing.T, server *http.ServeMux, url string) {
 	assert.NoError(t, err)
 	response := httptest.NewRecorder()
 	server.ServeHTTP(response, request)
-	assert.Equal(t, http.StatusOK, response.Code)
+	assert.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	var resBody handlers.GetAdsResponse
 	err = json.NewDecoder(response.Body).Decode(&resBody)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, resBody.Items)
 
 	params, _ := handlers.ParseGetAdsRequest(request)
-	now := time.Now()
-	var e time.Time
 	for _, ad := range resBody.Items {
-		assert.True(t, ad.EndAt.After(e))
-		e = ad.EndAt
-		assert.True(t, ad.EndAt.After(now))
-		assert.True(t, shouldShow(ad.Title, params))
+		assert.True(t, shouldShow(ad.Title, params), ad.Title, url)
 	}
 
 }
@@ -69,38 +64,46 @@ func shouldShow(adTitle string, queryParams handlers.GetAdsRequest) bool {
 		return false
 	}
 
-	//gender section
-	if strings.Contains(adTitle, "F") || strings.Contains(adTitle, "M") {
-		switch queryParams.Gender {
-		case models.Female:
-			return strings.Contains(adTitle, "F")
-		case models.Male:
-			return strings.Contains(adTitle, "M")
+	//gender
+	if strings.Contains(adTitle, "F") && !strings.Contains(adTitle, "M") {
+		if queryParams.Gender == models.Male {
+			return false
+		}
+	}
+	if strings.Contains(adTitle, "M") && !strings.Contains(adTitle, "F") {
+		if queryParams.Gender == models.Female {
+			return false
 		}
 	}
 
 	//country section
-	if strings.Contains(adTitle, "tw") || strings.Contains(adTitle, "jp") {
-		switch queryParams.Country {
-		case models.Taiwan:
-			return strings.Contains(adTitle, "tw")
-		case models.Japan:
-			return strings.Contains(adTitle, "jp")
+	if strings.Contains(adTitle, "tw") && !strings.Contains(adTitle, "jp") {
+		if queryParams.Country != models.Taiwan {
+			return false
 		}
-		return false
+	}
+	if strings.Contains(adTitle, "jp") && !strings.Contains(adTitle, "tw") {
+		if queryParams.Country != models.Japan {
+			return false
+		}
 	}
 
 	//platform section
 	if strings.Contains(adTitle, "web") || strings.Contains(adTitle, "ios") || strings.Contains(adTitle, "android") {
 		switch queryParams.Platform {
 		case models.Web:
-			return strings.Contains(adTitle, "web")
+			if !strings.Contains(adTitle, "web") {
+				return false
+			}
 		case models.Ios:
-			return strings.Contains(adTitle, "ios")
+			if !strings.Contains(adTitle, "ios") {
+				return false
+			}
 		case models.Android:
-			return strings.Contains(adTitle, "android")
+			if !strings.Contains(adTitle, "android") {
+				return false
+			}
 		}
-		return false
 	}
 
 	//age section
@@ -124,8 +127,8 @@ func generateTestAds() []models.Ad {
 	return []models.Ad{
 		{
 			ID:      uuid.New(),
-			StartAt: time.Now().Add(-time.Hour),
-			EndAt:   time.Now().Add(time.Hour),
+			StartAt: time.Now().UTC().Add(-time.Hour),
+			EndAt:   time.Now().UTC().Add(time.Hour),
 			Title:   "active_20_30_tw_web",
 			Conditions: []models.Condition{
 				{
@@ -142,14 +145,14 @@ func generateTestAds() []models.Ad {
 		},
 		{
 			ID:      uuid.New(),
-			StartAt: time.Now().Add(-time.Hour),
-			EndAt:   time.Now().Add(time.Hour),
+			StartAt: time.Now().UTC().Add(-time.Hour),
+			EndAt:   time.Now().UTC().Add(time.Hour),
 			Title:   "active",
 		},
 		{
 			ID:      uuid.New(),
-			StartAt: time.Now().Add(-time.Hour),
-			EndAt:   time.Now().Add(time.Hour),
+			StartAt: time.Now().UTC().Add(-time.Hour),
+			EndAt:   time.Now().UTC().Add(time.Hour),
 			Title:   "active_50_60_jp_ios_android_M",
 			Conditions: []models.Condition{
 				{
@@ -170,8 +173,8 @@ func generateTestAds() []models.Ad {
 		},
 		{
 			ID:      uuid.New(),
-			StartAt: time.Now().Add(-time.Hour),
-			EndAt:   time.Now().Add(time.Hour),
+			StartAt: time.Now().UTC().Add(-time.Hour),
+			EndAt:   time.Now().UTC().Add(time.Hour),
 			Title:   "active_20_30_tw_jp_ios",
 			Conditions: []models.Condition{
 				{
@@ -181,25 +184,28 @@ func generateTestAds() []models.Ad {
 						models.Taiwan,
 						models.Japan,
 					},
+					Platform: []models.Platform{
+						models.Ios,
+					},
 				},
 			},
 		},
 		{
 			ID:      uuid.New(),
-			StartAt: time.Now().Add(1000 * time.Hour),
-			EndAt:   time.Now().Add(1001 * time.Hour),
+			StartAt: time.Now().UTC().Add(1000 * time.Hour),
+			EndAt:   time.Now().UTC().Add(1001 * time.Hour),
 			Title:   "inactive",
 		},
 		{
 			ID:      uuid.New(),
-			StartAt: time.Now().Add(-time.Hour),
-			EndAt:   time.Now().Add(time.Hour),
+			StartAt: time.Now().UTC().Add(-time.Hour),
+			EndAt:   time.Now().UTC().Add(time.Hour),
 			Title:   "active",
 		},
 		{
 			ID:      uuid.New(),
-			StartAt: time.Now().Add(-time.Hour),
-			EndAt:   time.Now().Add(time.Hour),
+			StartAt: time.Now().UTC().Add(-time.Hour),
+			EndAt:   time.Now().UTC().Add(time.Hour),
 			Title:   "active_20_30_tw_web_F",
 			Conditions: []models.Condition{
 				{

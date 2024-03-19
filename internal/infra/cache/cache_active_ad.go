@@ -28,7 +28,7 @@ func storeActiveAd(ctx context.Context, rdb *redis.Client, ad models.Ad) error {
 }
 
 func storeActiveAds(ctx context.Context, rdb *redis.Client, ads []models.Ad) error {
-	err := rdb.Set(ctx, lastUpdateKey, time.Now(), time.Hour*2).Err()
+	err := rdb.Set(ctx, lastUpdateKey, time.Now().UTC(), time.Hour*2).Err()
 
 	if err != nil {
 		return err

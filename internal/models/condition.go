@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"slices"
 )
 
@@ -44,4 +45,14 @@ func (c Condition) Match(p ConditionParams) bool {
 		}
 	}
 	return true
+}
+
+func (c Condition) String() string {
+	jStr, _ := json.Marshal(c)
+	return string(jStr)
+}
+
+func (c ConditionParams) String() string {
+	jStr, _ := json.Marshal(c)
+	return string(jStr)
 }

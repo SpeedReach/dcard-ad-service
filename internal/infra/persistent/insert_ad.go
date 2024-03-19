@@ -22,7 +22,7 @@ func (db Database) InsertAd(ctx context.Context, ad models.Ad) error {
 	}
 
 	for _, condition := range ad.Conditions {
-		err = db.insertCondition(ctx, ad.ID.String(), condition)
+		err = db.insertCondition(ctx, ad.ID, condition)
 		if err != nil {
 			return err
 		}
@@ -30,7 +30,7 @@ func (db Database) InsertAd(ctx context.Context, ad models.Ad) error {
 	return nil
 }
 
-func (db Database) insertCondition(ctx context.Context, parentAdID string, condition models.Condition) error {
+func (db Database) insertCondition(ctx context.Context, parentAdID uuid.UUID, condition models.Condition) error {
 	stmt, err := db.inner.PrepareContext(ctx, "INSERT INTO Conditions (id, ad_id, ios, android, web, jp, tw, male, female, min_age, max_age) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)")
 	if err != nil {
 		logging.ContextualLog(ctx, zap.ErrorLevel, "Could not prepare context for insert condition", zap.Error(err))

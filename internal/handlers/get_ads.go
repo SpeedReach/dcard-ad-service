@@ -9,8 +9,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"go.uber.org/zap"
-	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -48,7 +48,6 @@ func GetAdsHandler(writer http.ResponseWriter, request *http.Request) {
 
 	response, err := fetchMatched(request.Context(), reqParams, conditionParams)
 	if err != nil {
-		logging.ContextualLog(request.Context(), zap.ErrorLevel, "error fetching matched ads", zap.Error(err))
 		http.Error(writer, "Internal Error", http.StatusInternalServerError)
 		return
 	}
@@ -56,7 +55,7 @@ func GetAdsHandler(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(writer).Encode(response)
 	if err != nil {
-		log.Printf("error encoding response: %v", err)
+		logging.ContextualLog(request.Context(), zap.ErrorLevel, "error encoding response", zap.Error(err))
 		http.Error(writer, "Internal Error", http.StatusInternalServerError)
 	}
 }
@@ -75,8 +74,11 @@ func fetchMatched(ctx context.Context, reqParams GetAdsRequest, conditionParams 
 	matchedAds := make([]models.Ad, 0)
 	for _, ad := range activeAds {
 		if ad.ShouldShow(conditionParams) {
+			logging.ContextualLog(ctx, zap.DebugLevel, "ad matched", zap.String("ad", ad.String()), zap.String("params", conditionParams.String()))
 			matched++
 			matchedAds = append(matchedAds, ad)
+		} else {
+			logging.ContextualLog(ctx, zap.DebugLevel, "ad not matched", zap.String("ad", ad.String()), zap.String("params", fmt.Sprint(conditionParams)))
 		}
 	}
 
@@ -100,18 +102,22 @@ func fetchMatched(ctx context.Context, reqParams GetAdsRequest, conditionParams 
 func getActiveAdsCacheAside(ctx context.Context, cacheService cache.Service, db persistent.Database, skip int, count int) ([]models.Ad, error) {
 	valid, err := cacheService.CheckCacheValid(ctx)
 	if err != nil {
+		logging.ContextualLog(ctx, zap.ErrorLevel, "error checking cache valid", zap.Error(err))
 		return []models.Ad{}, err
 	}
 
 	if !valid {
-		ads, err := db.FindAdsWithTime(ctx, time.Now().Add(80*time.Minute), time.Now())
+		logging.ContextualLog(ctx, zap.DebugLevel, "cache is invalid, fetching from database")
+		ads, err := db.FindAdsWithTime(ctx, time.Now().UTC().Add(80*time.Minute), time.Now().UTC())
 		if err != nil {
+			logging.ContextualLog(ctx, zap.ErrorLevel, "error retrieving ads from database", zap.Error(err))
 			return []models.Ad{}, err
 		}
 		err = cacheService.WriteActiveAds(ctx, ads)
-		return ads, err
+		return ads[min(skip, len(ads)):min(skip+count, len(ads))], err
 	}
 
+	logging.ContextualLog(ctx, zap.DebugLevel, "cache is valid, fetching from cache")
 	return cacheService.GetActiveAds(ctx, skip, count)
 }
 

@@ -50,12 +50,27 @@ func TestRedis(t *testing.T) {
 		{
 			ID:    uuid.New(),
 			Title: "title1",
-			EndAt: time.Now().Add(2 * time.Hour),
+			EndAt: time.Now().UTC().Add(2 * time.Hour),
+			Conditions: []models.Condition{
+				{
+					AgeStart: 20,
+					AgeEnd:   30,
+					Country: []models.Country{
+						models.Taiwan,
+					},
+					Platform: []models.Platform{
+						models.Web,
+					},
+					Gender: []models.Gender{
+						models.Male,
+					},
+				},
+			},
 		},
 		{
 			ID:    uuid.New(),
 			Title: "title2",
-			EndAt: time.Now().Add(1 * time.Hour),
+			EndAt: time.Now().UTC().Add(1 * time.Hour),
 		},
 	}
 
@@ -74,4 +89,9 @@ func TestRedis(t *testing.T) {
 	//check if sorted
 	assert.Equal(t, ads[0].ID, activeAds[1].ID)
 	assert.Equal(t, ads[1].ID, activeAds[0].ID)
+	assert.Equal(t, activeAds[1].Conditions[0].Country[0], models.Taiwan)
+	assert.Equal(t, activeAds[1].Conditions[0].Platform[0], models.Web)
+	assert.Equal(t, activeAds[1].Conditions[0].Gender[0], models.Male)
+	assert.Equal(t, activeAds[1].Conditions[0].AgeStart, 20)
+	assert.Equal(t, activeAds[1].Conditions[0].AgeEnd, 30)
 }

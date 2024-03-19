@@ -12,7 +12,7 @@ import (
 func NewServer(config infra.Config) *http.ServeMux {
 	//initializing resources
 	resourceMiddleware := infra.NewResourceMiddleware(config)
-	logger, err := zap.NewProduction()
+	logger, err := zap.NewDevelopment()
 	if err != nil {
 		panic(err)
 	}

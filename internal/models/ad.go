@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"github.com/google/uuid"
 	"time"
 )
@@ -14,6 +15,12 @@ type Ad struct {
 }
 
 func (ad Ad) ShouldShow(params ConditionParams) bool {
+	if !ad.IsActive() {
+		return false
+	}
+	if len(ad.Conditions) == 0 {
+		return true
+	}
 	for _, condition := range ad.Conditions {
 		if condition.Match(params) {
 			return true
@@ -23,6 +30,11 @@ func (ad Ad) ShouldShow(params ConditionParams) bool {
 }
 
 func (ad Ad) IsActive() bool {
-	now := time.Now()
+	now := time.Now().UTC()
 	return now.After(ad.StartAt) && now.Before(ad.EndAt)
+}
+
+func (ad Ad) String() string {
+	jStr, _ := json.Marshal(ad)
+	return string(jStr)
 }

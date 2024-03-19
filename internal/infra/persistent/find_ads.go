@@ -12,7 +12,7 @@ import (
 
 func (db Database) FindAdsWithTime(ctx context.Context, startBefore time.Time, endAfter time.Time) ([]models.Ad, error) {
 	prepareContext, err := db.inner.PrepareContext(ctx, `
-			SELECT a.id, a.title, a.start_at, a.end_at, c.min_age, c.max_age, c.male, c.female, c.ios, c.android, c.web
+			SELECT a.id, a.title, a.start_at, a.end_at, c.min_age, c.max_age, c.male, c.female, c.ios, c.android, c.web, c.jp, c.tw
 			FROM Ads a
 			LEFT JOIN Conditions c ON a.id = c.ad_id
 			WHERE a.start_at < $1 AND a.end_at > $2
@@ -34,18 +34,21 @@ func (db Database) FindAdsWithTime(ctx context.Context, startBefore time.Time, e
 		ad := models.Ad{}
 		condition := ScannedCondition{}
 		err = rows.Scan(&ad.ID, &ad.Title, &ad.StartAt, &ad.EndAt,
-			&condition.MinAge, &condition.MaxAge, &condition.Male, &condition.Female, &condition.Ios, &condition.Android, &condition.Web)
+			&condition.MinAge, &condition.MaxAge, &condition.Male, &condition.Female, &condition.Ios, &condition.Android, &condition.Web, &condition.Jp, &condition.Tw)
 		if err != nil {
 			logging.ContextualLog(ctx, zap.ErrorLevel, "error scanning rows", zap.Error(err))
 			return []models.Ad{}, err
 		}
 		if _, ok := ads[ad.ID]; !ok {
+			ad.Conditions = []models.Condition{ToConditionModel(condition)}
 			ads[ad.ID] = ad
 		} else {
 			ad.Conditions = append(ads[ad.ID].Conditions, ToConditionModel(condition))
 			ads[ad.ID] = ad
 		}
+
 	}
+
 	if rows.Err() != nil {
 		logging.ContextualLog(ctx, zap.ErrorLevel, "error scanning rows", zap.Error(err))
 		return []models.Ad{}, err
@@ -58,7 +61,7 @@ func (db Database) FindAdsWithTime(ctx context.Context, startBefore time.Time, e
 		i++
 	}
 	slices.SortFunc(values, func(i, j models.Ad) int {
-		if i.StartAt.Before(j.StartAt) {
+		if i.EndAt.Before(j.EndAt) {
 			return -1
 		}
 		return 1

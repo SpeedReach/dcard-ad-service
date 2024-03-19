@@ -24,15 +24,27 @@ type redisCacheService struct {
 }
 
 func NewRedisCacheService(inner *redis.Client) Service {
+	inner.Del(context.Background(), lastUpdateKey)
+	inner.Del(context.Background(), adsKey)
 	return redisCacheService{inner: inner}
 }
 
 func (r redisCacheService) CheckCacheValid(ctx context.Context) (bool, error) {
-	t, err := r.inner.Get(ctx, lastUpdateKey).Time()
+	result, err := r.inner.Get(ctx, lastUpdateKey).Result()
+
 	if err != nil {
+		if err == redis.Nil {
+			return false, nil
+		}
 		return false, err
 	}
-	return time.Now().Sub(t) < 1*time.Hour, nil
+
+	t, err := time.Parse(time.RFC3339Nano, result)
+	if err != nil {
+		return false, nil
+	}
+
+	return time.Now().UTC().Sub(t) < 1*time.Hour, nil
 }
 
 func (r redisCacheService) GetActiveAds(ctx context.Context, skip int, count int) ([]models.Ad, error) {
@@ -42,7 +54,7 @@ func (r redisCacheService) GetActiveAds(ctx context.Context, skip int, count int
 	}
 
 	ads := make([]models.Ad, 0, len(adStrings))
-	now := time.Now()
+	now := time.Now().UTC()
 	for _, adStr := range adStrings {
 		ad := models.Ad{}
 		err := json.NewDecoder(strings.NewReader(adStr)).Decode(&ad)
@@ -50,8 +62,8 @@ func (r redisCacheService) GetActiveAds(ctx context.Context, skip int, count int
 			return ads, err
 		}
 
-		//cache may contain expired ads, so we need to filter them out
-		if ad.EndAt.After(now) {
+		//cache may contain non-active ads, so we need to filter them out
+		if ad.StartAt.Before(now) && ad.EndAt.After(now) {
 			ads = append(ads, ad)
 		}
 	}

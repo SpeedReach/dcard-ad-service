@@ -32,7 +32,7 @@ func (m LoggerMiddleware) Middleware(next http.Handler) http.Handler {
 			zap.String("requestId", requestId),
 			zap.Int64("bytesIn", r.ContentLength),
 		}
-		start := time.Now()
+		start := time.Now().UTC()
 		next.ServeHTTP(w, r.WithContext(ctx))
 
 		fields = append(fields,
