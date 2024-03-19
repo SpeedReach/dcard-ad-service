@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"go.uber.org/zap"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 )
@@ -106,14 +107,21 @@ func getActiveAdsCacheAside(ctx context.Context, cacheService cache.Service, db 
 		return []models.Ad{}, err
 	}
 
+	now := time.Now().UTC()
+
 	if !valid {
 		logging.ContextualLog(ctx, zap.DebugLevel, "cache is invalid, fetching from database")
-		ads, err := db.FindAdsWithTime(ctx, time.Now().UTC().Add(80*time.Minute), time.Now().UTC())
+		ads, err := db.FindAdsWithTime(ctx, now.Add(80*time.Minute), now)
 		if err != nil {
 			logging.ContextualLog(ctx, zap.ErrorLevel, "error retrieving ads from database", zap.Error(err))
 			return []models.Ad{}, err
 		}
 		err = cacheService.WriteActiveAds(ctx, ads)
+
+		//since we fetch ads that will start in the future too, we need to filter them out before returning to the client
+		slices.DeleteFunc(ads, func(ad models.Ad) bool {
+			return ad.StartAt.Before(now)
+		})
 		return ads[min(skip, len(ads)):min(skip+count, len(ads))], err
 	}
 
