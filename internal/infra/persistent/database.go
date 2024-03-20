@@ -2,10 +2,10 @@ package persistent
 
 import "database/sql"
 
-type Database struct {
+type database struct {
 	inner *sql.DB
 }
 
-func NewSQLDatabase(inner *sql.DB) Database {
-	return Database{inner: inner}
+func NewSQLDatabase(inner *sql.DB) Storage {
+	return database{inner: inner}
 }

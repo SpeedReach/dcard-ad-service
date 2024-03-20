@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"advertise_service/internal/infra"
 	"advertise_service/internal/infra/cache"
 	"advertise_service/internal/infra/logging"
 	"advertise_service/internal/infra/persistent"
@@ -41,13 +40,12 @@ type item struct {
 func GetAdsHandler(writer http.ResponseWriter, request *http.Request) {
 	reqParams, err := ParseGetAdsRequest(request)
 	if err != nil {
-		logging.ContextualLog(request.Context(), zap.ErrorLevel, "bad request", zap.Error(err))
+		logger.Log(zap.ErrorLevel, "bad request", zap.Error(err))
 		http.Error(writer, err.Error(), http.StatusBadRequest)
 		return
 	}
-	conditionParams := extractConditionParams(reqParams)
 
-	response, err := fetchMatched(request.Context(), reqParams, conditionParams)
+	response, err := fetchMatched(request.Context(), reqParams)
 	if err != nil {
 		http.Error(writer, "Internal Error", http.StatusInternalServerError)
 		return
@@ -56,30 +54,33 @@ func GetAdsHandler(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(writer).Encode(response)
 	if err != nil {
-		logging.ContextualLog(request.Context(), zap.ErrorLevel, "error encoding response", zap.Error(err))
+		logger.Log(zap.ErrorLevel, "error encoding response", zap.Error(err))
 		http.Error(writer, "Internal Error", http.StatusInternalServerError)
 	}
 }
 
 // logic
-func fetchMatched(ctx context.Context, reqParams GetAdsRequest, conditionParams models.ConditionParams) (GetAdsResponse, error) {
-	cacheService := ctx.Value(infra.CacheContextKey{}).(cache.Service)
-	db := ctx.Value(infra.DatabaseContextKey{}).(persistent.Database)
+func fetchMatched(ctx context.Context, reqParams GetAdsRequest) (GetAdsResponse, error) {
+	logger := ctx.Value(logging.LoggerContextKey{}).(*zap.Logger)
+	cacheService := ctx.Value(CacheContextKey{}).(cache.Service)
+	db := ctx.Value(StorageContextKey{}).(persistent.Storage)
 
 	activeAds, err := getActiveAdsCacheAside(ctx, cacheService, db, reqParams.Offset, reqParams.Limit)
 	if err != nil {
 		return GetAdsResponse{}, err
 	}
 
+	conditionParams := ExtractConditionParams(reqParams)
 	matched := 0
 	matchedAds := make([]models.Ad, 0)
+
 	for _, ad := range activeAds {
 		if ad.ShouldShow(conditionParams) {
-			logging.ContextualLog(ctx, zap.DebugLevel, "ad matched", zap.String("ad", ad.String()), zap.String("params", conditionParams.String()))
+			logger.Log(zap.DebugLevel, "ad matched", zap.String("ad", ad.String()), zap.String("params", conditionParams.String()))
 			matched++
 			matchedAds = append(matchedAds, ad)
 		} else {
-			logging.ContextualLog(ctx, zap.DebugLevel, "ad not matched", zap.String("ad", ad.String()), zap.String("params", fmt.Sprint(conditionParams)))
+			logger.Log(zap.DebugLevel, "ad not matched", zap.String("ad", ad.String()), zap.String("params", fmt.Sprint(conditionParams)))
 		}
 	}
 
@@ -100,37 +101,36 @@ func fetchMatched(ctx context.Context, reqParams GetAdsRequest, conditionParams 
 }
 
 // get active ads with cache aside method
-func getActiveAdsCacheAside(ctx context.Context, cacheService cache.Service, db persistent.Database, skip int, count int) ([]models.Ad, error) {
+func getActiveAdsCacheAside(ctx context.Context, cacheService cache.Service, db persistent.Storage, skip int, count int) ([]models.Ad, error) {
 	valid, err := cacheService.CheckCacheValid(ctx)
 	if err != nil {
-		logging.ContextualLog(ctx, zap.ErrorLevel, "error checking cache valid", zap.Error(err))
+		logger.Log(zap.ErrorLevel, "error checking cache valid", zap.Error(err))
 		return []models.Ad{}, err
 	}
 
 	now := time.Now().UTC()
 
 	if !valid {
-		logging.ContextualLog(ctx, zap.DebugLevel, "cache is invalid, fetching from database")
+		logger.Log(zap.DebugLevel, "cache is invalid, fetching from database")
 		ads, err := db.FindAdsWithTime(ctx, now.Add(80*time.Minute), now)
 		if err != nil {
-			logging.ContextualLog(ctx, zap.ErrorLevel, "error retrieving ads from database", zap.Error(err))
+			logger.Log(zap.ErrorLevel, "error retrieving ads from database", zap.Error(err))
 			return []models.Ad{}, err
 		}
 		err = cacheService.WriteActiveAds(ctx, ads)
-
 		//since we fetch ads that will start in the future too, we need to filter them out before returning to the client
-		slices.DeleteFunc(ads, func(ad models.Ad) bool {
-			return ad.StartAt.Before(now)
+		ads = slices.DeleteFunc(ads, func(ad models.Ad) bool {
+			return ad.StartAt.After(now)
 		})
 		return ads[min(skip, len(ads)):min(skip+count, len(ads))], err
 	}
 
-	logging.ContextualLog(ctx, zap.DebugLevel, "cache is valid, fetching from cache")
+	logger.Log(zap.DebugLevel, "cache is valid, fetching from cache")
 	return cacheService.GetActiveAds(ctx, skip, count)
 }
 
 // helper function for parsing request
-func extractConditionParams(req GetAdsRequest) models.ConditionParams {
+func ExtractConditionParams(req GetAdsRequest) models.ConditionParams {
 	return models.ConditionParams{
 		Age:      req.Age,
 		Gender:   req.Gender,

@@ -43,5 +43,4 @@ func TestCondition_Match(t *testing.T) {
 
 	assert.True(t, cond3.Match(params1))
 	assert.True(t, cond3.Match(params2))
-
 }

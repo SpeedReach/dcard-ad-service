@@ -10,7 +10,8 @@ import (
 	"time"
 )
 
-func (db Database) FindAdsWithTime(ctx context.Context, startBefore time.Time, endAfter time.Time) ([]models.Ad, error) {
+func (db database) FindAdsWithTime(ctx context.Context, startBefore time.Time, endAfter time.Time) ([]models.Ad, error) {
+	logger := ctx.Value(logging.LoggerContextKey{}).(*zap.Logger)
 	prepareContext, err := db.inner.PrepareContext(ctx, `
 			SELECT a.id, a.title, a.start_at, a.end_at, c.min_age, c.max_age, c.male, c.female, c.ios, c.android, c.web, c.jp, c.tw
 			FROM Ads a
@@ -19,12 +20,12 @@ func (db Database) FindAdsWithTime(ctx context.Context, startBefore time.Time, e
 		`)
 
 	if err != nil {
-		logging.ContextualLog(ctx, zap.ErrorLevel, "Could not prepare context for find ads with time", zap.Error(err))
+		logger.Log(zap.ErrorLevel, "Could not prepare context for find ads with time", zap.Error(err))
 		return []models.Ad{}, err
 	}
 	rows, err := prepareContext.QueryContext(ctx, startBefore, endAfter)
 	if err != nil {
-		logging.ContextualLog(ctx, zap.ErrorLevel, "Could not query context for find ads with time", zap.Error(err))
+		logger.Log(zap.ErrorLevel, "Could not query context for find ads with time", zap.Error(err))
 		return []models.Ad{}, err
 	}
 	defer rows.Close()
@@ -36,7 +37,7 @@ func (db Database) FindAdsWithTime(ctx context.Context, startBefore time.Time, e
 		err = rows.Scan(&ad.ID, &ad.Title, &ad.StartAt, &ad.EndAt,
 			&condition.MinAge, &condition.MaxAge, &condition.Male, &condition.Female, &condition.Ios, &condition.Android, &condition.Web, &condition.Jp, &condition.Tw)
 		if err != nil {
-			logging.ContextualLog(ctx, zap.ErrorLevel, "error scanning rows", zap.Error(err))
+			logger.Log(zap.ErrorLevel, "error scanning rows", zap.Error(err))
 			return []models.Ad{}, err
 		}
 		if _, ok := ads[ad.ID]; !ok {
@@ -50,7 +51,7 @@ func (db Database) FindAdsWithTime(ctx context.Context, startBefore time.Time, e
 	}
 
 	if rows.Err() != nil {
-		logging.ContextualLog(ctx, zap.ErrorLevel, "error scanning rows", zap.Error(err))
+		logger.Log(zap.ErrorLevel, "error scanning rows", zap.Error(err))
 		return []models.Ad{}, err
 	}
 	values := make([]models.Ad, len(ads))

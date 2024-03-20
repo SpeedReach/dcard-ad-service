@@ -27,4 +27,4 @@ jobs:
       env:
         POSTGRES_URI: ${{ secrets.POSTGRES_URI }}
         REDIS_URI: ${{ secrets.REDIS_URI }}
-      run: go test ./... -v -cover -tags=integration
+      run: make test_all

@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"net/http"
 	"time"
 )
@@ -21,7 +20,7 @@ func (m LoggerMiddleware) Middleware(next http.Handler) http.Handler {
 		requestId := uuid.New().String()
 		ctx := r.Context()
 		ctx = context.WithValue(ctx, RequestIdContextKey{}, requestId)
-		ctx = context.WithValue(ctx, LoggerContextKey{}, m.Logger)
+		ctx = context.WithValue(ctx, LoggerContextKey{}, m.Logger.With(zap.String("requestId", requestId)))
 		r.WithContext(ctx)
 
 		fields := []zap.Field{
@@ -41,14 +40,4 @@ func (m LoggerMiddleware) Middleware(next http.Handler) http.Handler {
 		m.Logger.Info("Request", fields...)
 		return
 	})
-}
-
-func ContextualLog(ctx context.Context, lvl zapcore.Level, msg string, fields ...zap.Field) {
-	logger := ctx.Value(LoggerContextKey{}).(*zap.Logger)
-	if ctx.Value(RequestIdContextKey{}) == nil {
-		logger.Log(lvl, msg, fields...)
-	} else {
-		requestId := ctx.Value(RequestIdContextKey{}).(string)
-		logger.With(zap.String("requestId", requestId)).Log(lvl, msg, fields...)
-	}
 }

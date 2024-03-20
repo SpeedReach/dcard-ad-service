@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"advertise_service/internal/infra"
 	"advertise_service/internal/infra/cache"
 	"advertise_service/internal/infra/logging"
 	"advertise_service/internal/infra/persistent"
@@ -66,6 +65,7 @@ func PostAdHandler(writer http.ResponseWriter, request *http.Request) {
 }
 
 func postAd(ctx context.Context, reqBody PostAdRequest) (PostAdResponse, error) {
+	logger := ctx.Value(logging.LoggerContextKey{}).(*zap.Logger)
 	ad := models.Ad{
 		ID:         uuid.New(),
 		Title:      reqBody.Title,
@@ -73,7 +73,7 @@ func postAd(ctx context.Context, reqBody PostAdRequest) (PostAdResponse, error) 
 		EndAt:      reqBody.EndAt,
 		Conditions: reqBody.Conditions,
 	}
-	database := ctx.Value(infra.DatabaseContextKey{}).(persistent.Database)
+	database := ctx.Value(StorageContextKey{}).(persistent.Storage)
 
 	err := database.InsertAd(ctx, ad)
 	if err != nil {
@@ -82,11 +82,11 @@ func postAd(ctx context.Context, reqBody PostAdRequest) (PostAdResponse, error) 
 
 	//store ad in cache if it's active the time that it's created
 	if ad.StartAt.Before(time.Now()) {
-		cacheService := ctx.Value(infra.CacheContextKey{}).(cache.Service)
+		cacheService := ctx.Value(CacheContextKey{}).(cache.Service)
 		err := cacheService.WriteActiveAd(ctx, ad)
 		if err != nil {
 			// It's ok that we failed to immediate cache the ad, scheduler will take care of it
-			logging.ContextualLog(ctx, zap.ErrorLevel, "error caching active ad", zap.Error(err))
+			logger.Log(zap.ErrorLevel, "error caching active ad", zap.Error(err))
 		}
 	}
 
