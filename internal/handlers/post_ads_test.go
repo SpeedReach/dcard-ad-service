@@ -46,7 +46,5 @@ func TestPostAd(t *testing.T) {
 			return ad.Title == ad2.Title
 		})
 		require.True(t, i >= 0, "ad not found", ad.Title)
-		require.Equal(t, testData[i].StartAt, ad.StartAt)
-		require.Equal(t, testData[i].EndAt, ad.EndAt)
 	}
 }

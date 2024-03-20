@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -77,7 +78,7 @@ func storeActiveAds(ctx context.Context, rdb *redis.Client, ads []models.Ad) err
 	}
 	err = rdb.ZAdd(ctx, adsKey, entries...).Err()
 	if err != nil {
-		logger.Log(zap.ErrorLevel, "failed to cache active ads", zap.Error(err))
+		logger.Log(zap.ErrorLevel, "failed to cache active ads", zap.Error(err), zap.String("entries", fmt.Sprint(entries)))
 		return err
 	}
 	return nil
