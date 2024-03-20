@@ -1,4 +1,4 @@
-#include .env
+include .env
 PACKAGES	?= $(shell go list ./...)
 BUILD_DIR ?= build
 

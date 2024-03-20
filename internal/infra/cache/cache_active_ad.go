@@ -12,8 +12,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"log"
-	"slices"
-	"strconv"
 	"time"
 )
 
@@ -30,6 +28,7 @@ func storeActiveAd(ctx context.Context, rdb *redis.Client, ad models.Ad) error {
 	if err != nil {
 		return err
 	}
+
 	err = rdb.ZAdd(ctx, adsKey, redis.Z{Member: jsonStr.String(), Score: float64(ad.EndAt.Unix())}).Err()
 	if err != nil {
 		log.Printf("failed to cache active ad: %v", err)
@@ -40,11 +39,9 @@ func storeActiveAd(ctx context.Context, rdb *redis.Client, ad models.Ad) error {
 
 func storeActiveAds(ctx context.Context, rdb *redis.Client, ads []models.Ad) error {
 	logger := ctx.Value(logging.LoggerContextKey{}).(*zap.Logger)
-	lastUpdate, err := getLastUpdate(ctx, rdb)
-
 	//make sure only one client is updating the whole list
 	lockId := uuid.New().String()
-	err = tryAcquireUpdateLock(ctx, rdb, lockId)
+	err := tryAcquireUpdateLock(ctx, rdb, lockId)
 	if err != nil {
 		return err
 	}
@@ -57,19 +54,7 @@ func storeActiveAds(ctx context.Context, rdb *redis.Client, ads []models.Ad) err
 		return err
 	}
 
-	//clear expired ads
-	err = rdb.ZRemRangeByScore(ctx, adsKey, "0", strconv.Itoa(int(lastUpdate.Unix()/1000))).Err()
-	if err != nil {
-		logger.Log(zap.ErrorLevel, "failed to clear expired ads", zap.Error(err))
-		return err
-	}
-
-	logger.Log(zap.DebugLevel, "ads to add before remove duplicate", zap.Int("count", len(ads)))
-	//remove duplicate ads
-	ads = slices.DeleteFunc(ads, func(i models.Ad) bool {
-		return lastUpdate.Add(80 * time.Minute).Before(i.StartAt)
-	})
-	logger.Log(zap.DebugLevel, "ads to add after remove duplicate", zap.Int("count", len(ads)))
+	//prepare active ads
 	entries := make([]redis.Z, len(ads))
 	for i, ad := range ads {
 		jsonStr, err := json.Marshal(ad)
@@ -78,6 +63,15 @@ func storeActiveAds(ctx context.Context, rdb *redis.Client, ads []models.Ad) err
 		}
 		entries[i] = redis.Z{Member: jsonStr, Score: float64(ad.EndAt.Unix() / 1000)}
 	}
+
+	//clear all ads
+	err = rdb.Del(ctx, adsKey).Err()
+	if err != nil {
+		logger.Log(zap.ErrorLevel, "failed to clear all ads", zap.Error(err))
+		return err
+	}
+
+	//store new ads
 	err = rdb.ZAdd(ctx, adsKey, entries...).Err()
 	if err != nil {
 		logger.Log(zap.ErrorLevel, "failed to cache active ads", zap.Error(err), zap.String("entries", fmt.Sprint(entries)))
