@@ -64,10 +64,12 @@ func storeActiveAds(ctx context.Context, rdb *redis.Client, ads []models.Ad) err
 		return err
 	}
 
+	logger.Log(zap.DebugLevel, "ads to add before remove duplicate", zap.Int("count", len(ads)))
 	//remove duplicate ads
 	ads = slices.DeleteFunc(ads, func(i models.Ad) bool {
 		return lastUpdate.Add(80 * time.Minute).Before(i.StartAt)
 	})
+	logger.Log(zap.DebugLevel, "ads to add after remove duplicate", zap.Int("count", len(ads)))
 	entries := make([]redis.Z, len(ads))
 	for i, ad := range ads {
 		jsonStr, err := json.Marshal(ad)

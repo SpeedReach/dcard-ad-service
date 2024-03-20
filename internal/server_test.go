@@ -36,7 +36,7 @@ func getAds(t *testing.T, server http.Handler, url string) {
 	require.NoError(t, err)
 	response := httptest.NewRecorder()
 	server.ServeHTTP(response, request)
-	assert.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	var resp handlers.GetAdsResponse
 	err = json.Unmarshal(response.Body.Bytes(), &resp)
 	assert.NoError(t, err)
