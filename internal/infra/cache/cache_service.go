@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"advertise_service/internal/infra/logging"
 	"advertise_service/internal/models"
 	"context"
 	"encoding/json"
@@ -8,6 +9,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"strings"
 	"testing"
 	"time"
@@ -20,7 +22,8 @@ type Service interface {
 	GetActiveAds(ctx context.Context, skip int, count int) ([]models.Ad, error)
 	// WriteActiveAd stores an active ad into the cache
 	WriteActiveAd(ctx context.Context, ad models.Ad) error
-	// WriteActiveAds stores multiple active ads into cache
+
+	// WriteActiveAds updates last update time, clears expired ads, and inserts new multiple active ads into cache
 	WriteActiveAds(ctx context.Context, ad []models.Ad) error
 	// Clear clears the cache, useful for testing
 	Clear(ctx context.Context) error
@@ -37,18 +40,9 @@ func NewRedisCacheService(inner *redis.Client) Service {
 }
 
 func (r redisCacheService) CheckCacheValid(ctx context.Context) (bool, error) {
-	result, err := r.inner.Get(ctx, lastUpdateKey).Result()
-
+	t, err := getLastUpdate(ctx, r.inner)
 	if err != nil {
-		if err == redis.Nil {
-			return false, nil
-		}
 		return false, err
-	}
-
-	t, err := time.Parse(time.RFC3339Nano, result)
-	if err != nil {
-		return false, nil
 	}
 
 	return isValid(t), nil
@@ -91,6 +85,8 @@ func (r redisCacheService) WriteActiveAds(ctx context.Context, ads []models.Ad) 
 }
 
 func TestCacheService(t *testing.T, service Service) {
+	logger, _ := zap.NewDevelopment()
+	ctx := context.WithValue(context.Background(), logging.LoggerContextKey{}, logger)
 	err := service.Clear(context.Background())
 	require.NoError(t, err)
 	valid, err := service.CheckCacheValid(context.Background())
@@ -113,10 +109,10 @@ func TestCacheService(t *testing.T, service Service) {
 				},
 			},
 		}
-		err := service.WriteActiveAd(context.Background(), ad)
+		err := service.WriteActiveAd(ctx, ad)
 		require.NoError(t, err)
 
-		activeAds, err := service.GetActiveAds(context.Background(), 0, 3)
+		activeAds, err := service.GetActiveAds(ctx, 0, 3)
 		if err != nil {
 			return
 		}
@@ -157,14 +153,14 @@ func TestCacheService(t *testing.T, service Service) {
 			},
 		}
 
-		err = service.WriteActiveAds(context.Background(), ads)
+		err = service.WriteActiveAds(ctx, ads)
 		require.NoError(t, err)
 
-		valid, err = service.CheckCacheValid(context.Background())
+		valid, err = service.CheckCacheValid(ctx)
 		assert.NoError(t, err)
 		assert.True(t, valid)
 
-		activeAds, err := service.GetActiveAds(context.Background(), 0, 3)
+		activeAds, err := service.GetActiveAds(ctx, 0, 3)
 		if err != nil {
 			return
 		}
