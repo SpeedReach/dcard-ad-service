@@ -51,7 +51,7 @@ cache 的部分主要用在 get active ads 的時候，由於該api 會被大量
 尤其同時間active的ad數量不會超過1000筆，非常適合拿來cache。選擇使用redis而不是in mem cache的原因是，stateless的server更容易scale，若單個server的效能無法達到需求，可以簡單的增加server數量。   
 cache 的方式是cache-aside，會先去查詢redis中上一次更新active ad的時間，如果超過一個小時，就會去postgres中查詢(start time < now + 80min) && now < end time 的所有ad並更新redis。
 這邊會發現，cache 中存的是現在active 與未來80分鐘內會active的所有 ad，比較有可能會出現問題的地方是如果active ad的active時間非常短，雖然同時不會超過1000筆active，但一小時內可能有上萬筆active ad。  
-不過我推測ad的active時間應該不會太短，所以這部分是不太會出問題的，如果需要調整的話可以將cache valid的時間調短。
+不過我推測ad的active時間應該不會太短，所以這部分是不太會出問題的，如果需要調整的話可以將cache valid的時間調短。  
 更新active ad的時候會先acquire lock，更新完後會release來確保一次只有一client更新。
 
 ![erd](https://raw.githubusercontent.com/SpeedReach/dcard-ad-service/main/assets/erd.png)  
