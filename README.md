@@ -52,6 +52,7 @@ cache 的部分主要用在 get active ads 的時候，由於該api 會被大量
 cache 的方式是cache-aside，會先去查詢redis中上一次更新active ad的時間，如果超過一個小時，就會去postgres中查詢(start time < now + 80min) && now < end time 的所有ad並更新redis。
 這邊會發現，cache 中存的是現在active 與未來80分鐘內會active的所有 ad，比較有可能會出現問題的地方是如果active ad的active時間非常短，雖然同時不會超過1000筆active，但一小時內可能有上萬筆active ad。  
 不過我推測ad的active時間應該不會太短，所以這部分是不太會出問題的，如果需要調整的話可以將cache valid的時間調短。
+更新active ad的時候會先acquire lock，更新完後會release來確保一次只有一client更新。
 
 ![erd](https://raw.githubusercontent.com/SpeedReach/dcard-ad-service/main/assets/erd.png)  
 這邊的erd設計算是有點偷吃步，沒有將gender，country，platform各獨立成一個table。優點是查詢與開發的時候可以更快速與方便，缺點是日後如果要新增更多種condition，這個table會很難scale。不過由於這是assignment，之後並不會有新增更多種condition的需求，所以我認為是可以接受的。
@@ -59,6 +60,7 @@ cache 的方式是cache-aside，會先去查詢redis中上一次更新active ad�
 ### Libraries
 http server 使用golang 內建，無使用框架  
 sql 使用 golang 內建的 sql package 搭配 pgx driver，用純sql的方式寫，不使用orm
+logging & tracing 的部分使用uber 的 zap套件，每次有新的請求時，會生成一組request id 方便debug跟日誌查詢
 
 
 ### TODO
