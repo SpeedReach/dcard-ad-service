@@ -62,6 +62,10 @@ http server 使用golang 內建，無使用框架
 sql 使用 golang 內建的 sql package 搭配 pgx driver，用純sql的方式寫，不使用orm
 logging & tracing 的部分使用uber 的 zap套件，每次有新的請求時，會生成一組request id 方便debug跟日誌查詢
 
+### Testing
+test 分為 unit test與integration test，unit test主要是針對handler與domain logic，integration test則是針對整個api的行為。
+unit test 會使用mock db與cache，integration test則會使用真實的db與cache。 unit test 的db會使用in memory sqlite。
+
 
 ### TODO
 由於stateless 的設計，與採用redis cache，搭配load balancer，若有足夠的硬體可以輕鬆處裡破百萬的請求，但現在凌晨五點了，明天起來再用我的小破電腦跑k6..
