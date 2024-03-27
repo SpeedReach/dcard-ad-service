@@ -114,7 +114,7 @@ func getActiveAdsCacheAside(ctx context.Context, cacheService cache.Service, db 
 
 	if !valid {
 		logger.Log(zap.DebugLevel, "cache is invalid, fetching from database")
-		ads, err := db.FindAdsWithTime(ctx, now.Add(80*time.Minute), now)
+		ads, err := db.FindAdsWithTime(ctx, now.Add(cache.Interval+cache.Tolerance), now)
 		if err != nil {
 			logger.Log(zap.ErrorLevel, "error retrieving ads from database", zap.Error(err))
 			return []models.Ad{}, err

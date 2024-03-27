@@ -4,20 +4,21 @@ package internal
 
 import (
 	"advertise_service/internal/handlers"
-	"advertise_service/internal/infra"
 	"advertise_service/internal/mock"
 	"advertise_service/internal/models"
 	"bytes"
 	"encoding/json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
 
 func TestGetAds(t *testing.T) {
-	server := newProductionServer(infra.LoadConfig())
+	logger, _ := zap.NewDevelopment()
+	server := NewServer(mock.NewStorage(), mock.NewCache(), logger)
 	requests := generatePostAdsRequests()
 	for _, req := range requests {
 		postAd(t, server, req)

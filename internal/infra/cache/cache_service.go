@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"slices"
 	"testing"
 	"time"
 )
@@ -22,7 +23,7 @@ type Service interface {
 	// WriteActiveAd stores an active ad into the cache, used when the create ad is already active.
 	WriteActiveAd(ctx context.Context, ad models.Ad) error
 
-	// Update updates last update time, clears expired ads, and inserts new multiple active ads into cache
+	// Update updates lastUpdate time, clears expired ads, and inserts new multiple active ads into cache.
 	// NOTICE: This function only writes ad that has a start time greater than the largest start time in the cache
 	Update(ctx context.Context, ad []models.Ad) (int, error)
 
@@ -50,7 +51,16 @@ func (r redisCacheService) CheckCacheValid(ctx context.Context) (bool, error) {
 }
 
 func (r redisCacheService) GetActiveAds(ctx context.Context, skip int, count int) ([]models.Ad, error) {
-	return getAdsFromRedis(ctx, r.inner, skip, count)
+	ads, err := getAdsFromRedis(ctx, r.inner, skip, count)
+	if err != nil {
+		return []models.Ad{}, err
+	}
+	//may contain ads that start later, so we need to filter them out.
+	now := time.Now()
+	ads = slices.DeleteFunc(ads, func(ad models.Ad) bool {
+		return ad.StartAt.After(now)
+	})
+	return ads, nil
 }
 
 func (r redisCacheService) WriteActiveAd(ctx context.Context, ad models.Ad) error {
@@ -69,6 +79,7 @@ func TestCacheService(t *testing.T, service Service) {
 	logger, _ := zap.NewDevelopment()
 	ctx := context.WithValue(context.Background(), logging.LoggerContextKey{}, logger)
 	require.NoError(t, service.Clear(ctx))
+
 	valid, err := service.CheckCacheValid(context.Background())
 	require.NoError(t, err)
 	assert.False(t, valid)
@@ -109,8 +120,8 @@ func TestCacheService(t *testing.T, service Service) {
 			{
 				ID:      uuid.New(),
 				Title:   "title1",
-				StartAt: time.Now().UTC().Add(-2 * time.Hour),
-				EndAt:   time.Now().UTC().Add(2 * time.Hour),
+				StartAt: time.Now().UTC().Add(-2 * Interval),
+				EndAt:   time.Now().UTC().Add(2 * Interval),
 				Conditions: []models.Condition{
 					{
 						AgeStart: 20,
@@ -129,9 +140,9 @@ func TestCacheService(t *testing.T, service Service) {
 			},
 			{
 				ID:      uuid.New(),
-				StartAt: time.Now().UTC().Add(-2 * time.Hour),
+				StartAt: time.Now().UTC().Add(-2 * Interval),
 				Title:   "title2",
-				EndAt:   time.Now().UTC().Add(1 * time.Hour),
+				EndAt:   time.Now().UTC().Add(1 * Interval),
 			},
 		}
 

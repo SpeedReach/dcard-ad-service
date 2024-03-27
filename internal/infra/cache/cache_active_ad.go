@@ -4,6 +4,7 @@ import (
 	"advertise_service/internal/infra/logging"
 	"advertise_service/internal/models"
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,6 +15,7 @@ import (
 	"log"
 	"math"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -38,6 +40,11 @@ func storeActiveAd(ctx context.Context, rdb *redis.Client, ad models.Ad) error {
 }
 
 func updateCache(ctx context.Context, rdb *redis.Client, ads []models.Ad) (int, error) {
+	allowStartBefore := time.Now().UTC().Add(Interval).Add(Tolerance)
+	ads = slices.DeleteFunc(ads, func(ad models.Ad) bool {
+		return !ad.StartAt.Before(allowStartBefore)
+	})
+
 	logger := ctx.Value(logging.LoggerContextKey{}).(*zap.Logger)
 	//acquire lock to make sure only one client is updating the whole list
 	lockId := uuid.New().String()
@@ -48,7 +55,8 @@ func updateCache(ctx context.Context, rdb *redis.Client, ads []models.Ad) (int, 
 	defer releaseUpdateLock(ctx, rdb, lockId)
 
 	//remove ads that are expired
-	rdb.ZRemRangeByScore(ctx, adsKey, "-inf", fmt.Sprintf("(%d", time.Now().UTC().Unix()))
+	removed, err := rdb.ZRemRangeByScore(ctx, adsKey, "-inf", strconv.FormatInt(time.Now().UTC().Unix()/1000, 10)).Result()
+	logger.Log(zap.DebugLevel, "removed expired ads", zap.Int64("amount", removed))
 
 	//get the largest start time in the cache
 	largestStartTime, err := getLargestStartInCache(ctx, rdb)
@@ -61,8 +69,10 @@ func updateCache(ctx context.Context, rdb *redis.Client, ads []models.Ad) (int, 
 	var entries []redis.Z
 	for _, ad := range ads {
 		if !ad.StartAt.After(largestStartTime) {
-			logger.Log(zap.DebugLevel, "skipping ad that has already started", zap.String("ad_id", ad.ID.String()), zap.Time("start_at", ad.StartAt))
+			logger.Log(zap.DebugLevel, "skipping ad that is already in cache", zap.String("ad_id", ad.ID.String()), zap.Time("start_at", ad.StartAt))
 			continue
+		} else {
+			logger.Log(zap.DebugLevel, "not skipping", zap.Time("start_at", ad.StartAt))
 		}
 		jsonStr, err := json.Marshal(ad)
 		if err != nil {
@@ -73,9 +83,10 @@ func updateCache(ctx context.Context, rdb *redis.Client, ads []models.Ad) (int, 
 
 	if len(entries) != 0 {
 		//store new ads
-		err = rdb.ZAdd(ctx, adsKey, entries...).Err()
-		if err != nil {
-			logger.Log(zap.ErrorLevel, "failed to cache active ads", zap.Error(err), zap.String("entries", fmt.Sprint(entries)))
+		count, err := rdb.ZAdd(ctx, adsKey, entries...).Result()
+
+		if err != nil || count != int64(len(entries)) {
+			logger.Log(zap.ErrorLevel, "failed to cache active ads", zap.Error(err), zap.Int64("insert_count", count), zap.String("entries", fmt.Sprint(entries)))
 			return 0, err
 		}
 	}
@@ -136,18 +147,13 @@ func getAdsFromRedis(ctx context.Context, client *redis.Client, skip int, count 
 	}
 
 	ads := make([]models.Ad, 0, len(adStrings))
-	now := time.Now().UTC()
 	for _, adStr := range adStrings {
 		ad := models.Ad{}
 		err := json.NewDecoder(strings.NewReader(adStr)).Decode(&ad)
 		if err != nil {
 			return ads, err
 		}
-
-		//cache may contain non-active ads, so we need to filter them out
-		if ad.StartAt.Before(now) && ad.EndAt.After(now) {
-			ads = append(ads, ad)
-		}
+		ads = append(ads, ad)
 	}
 	return ads, nil
 }
@@ -162,13 +168,7 @@ func getLargestStartInCache(ctx context.Context, rdb *redis.Client) (time.Time, 
 
 	if len(inCacheAds) != 0 {
 		return slices.MaxFunc(inCacheAds, func(i, j models.Ad) int {
-			if i.StartAt.Before(j.StartAt) {
-				return -1
-			}
-			if i.StartAt.After(j.StartAt) {
-				return 1
-			}
-			return 0
+			return cmp.Compare(i.StartAt.Unix(), j.StartAt.Unix())
 		}).StartAt, nil
 	} else {
 		return time.Unix(0, 0), nil
