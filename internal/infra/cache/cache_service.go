@@ -68,8 +68,7 @@ func (r redisCacheService) Update(ctx context.Context, ads []models.Ad) (int, er
 func TestCacheService(t *testing.T, service Service) {
 	logger, _ := zap.NewDevelopment()
 	ctx := context.WithValue(context.Background(), logging.LoggerContextKey{}, logger)
-	err := service.Clear(context.Background())
-	require.NoError(t, err)
+	require.NoError(t, service.Clear(ctx))
 	valid, err := service.CheckCacheValid(context.Background())
 	require.NoError(t, err)
 	assert.False(t, valid)
@@ -101,7 +100,7 @@ func TestCacheService(t *testing.T, service Service) {
 		assert.Equal(t, ad.ID, activeAds[0].ID)
 		assert.Equal(t, ad.Conditions, activeAds[0].Conditions)
 	})
-	service.Clear(ctx)
+	require.NoError(t, service.Clear(ctx))
 
 	t.Run("Update", func(t *testing.T) {
 		assert.NoError(t, err)
@@ -141,7 +140,7 @@ func TestCacheService(t *testing.T, service Service) {
 		assert.Equal(t, 2, writeCount)
 
 		valid, err = service.CheckCacheValid(ctx)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, valid)
 
 		activeAds, err := service.GetActiveAds(ctx, 0, 3)
@@ -160,7 +159,7 @@ func TestCacheService(t *testing.T, service Service) {
 
 		//write second time
 		writeCount, err = service.Update(ctx, ads)
-		assert.Equal(t, writeCount, 0)
+		assert.Equal(t, 0, writeCount)
 	})
 
 }

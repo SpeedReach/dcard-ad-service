@@ -76,3 +76,5 @@ logging & tracing 的部分使用uber 的 zap套件，每次有新的請求時�
 test 分為 unit test與integration test，unit test主要是針對handler與domain logic，integration test則是針對整個api的行為。
 unit test 會使用mock cache與 in memory sqlite， integration test則會使用真實的cloud db與redis，所以需要設定環境參數。
 
+### Time Domain
+Uses UTC time across the project, to simplify the process of handling different time zone.
