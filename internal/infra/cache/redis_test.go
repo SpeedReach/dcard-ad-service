@@ -109,4 +109,11 @@ func TestRedis(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, 0, writeAmount)
 	})
+
+	t.Run("full test", func(t *testing.T) {
+		rdb := setup(t)
+		reset(rdb)
+		defer rdb.Close()
+		TestCacheService(t, NewRedisCacheService(rdb))
+	})
 }

@@ -5,6 +5,7 @@ package mock
 import (
 	"advertise_service/internal/infra/cache"
 	"advertise_service/internal/models"
+	"cmp"
 	"context"
 	"slices"
 	"time"
@@ -62,11 +63,7 @@ func (c mockCache) Update(ctx context.Context, ad []models.Ad) (int, error) {
 
 	if len(c.inner.ads) != 0 {
 		largestStart = slices.MaxFunc(c.inner.ads, func(a, b models.Ad) int {
-			if a.EndAt.After(b.EndAt) {
-				return 1
-			} else {
-				return -1
-			}
+			return cmp.Compare(a.StartAt.Unix(), b.StartAt.Unix())
 		}).StartAt
 	}
 
