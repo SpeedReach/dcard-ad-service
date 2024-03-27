@@ -82,6 +82,10 @@ func updateCache(ctx context.Context, rdb *redis.Client, ads []models.Ad) (int, 
 
 	//update last update time
 	err = rdb.Set(ctx, lastUpdateKey, time.Now().UTC(), time.Hour*2).Err()
+	if err != nil {
+		logger.Log(zap.ErrorLevel, "fail to update time", zap.Error(err))
+		return 0, nil
+	}
 	return len(entries), nil
 }
 
