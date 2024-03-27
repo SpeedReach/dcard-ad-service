@@ -81,7 +81,7 @@ func postAd(ctx context.Context, reqBody PostAdRequest) (PostAdResponse, error) 
 	}
 
 	//store ad in cache if it's active the time that it's created
-	if ad.StartAt.Before(time.Now()) {
+	if ad.StartAt.Before(time.Now().Add(cache.Interval + cache.Tolerance)) {
 		cacheService := ctx.Value(CacheContextKey{}).(cache.Service)
 		err := cacheService.WriteActiveAd(ctx, ad)
 		if err != nil {

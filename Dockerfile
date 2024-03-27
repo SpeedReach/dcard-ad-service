@@ -8,7 +8,7 @@ RUN go mod download && go mod verify
 
 COPY . .
 
-RUN go build -o /app
+RUN go build -o /app /usr/src/app/cmd/main.go
 
 
 FROM alpine:3.19

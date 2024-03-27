@@ -17,6 +17,7 @@ make test_all => run all tests including integration tests, requires env vars to
 ## Environment Variables
 - POSTGRES_URI: postgres connection string
 - REDIS_URI: redis connection string
+- AUTO_MIGRATION: creates table on start, (true, false)
 
 
 ## Directory Structure
@@ -49,10 +50,19 @@ API 跟作業中的說明文件一模一樣，只差在 get ads 的時候，會�
 資料庫是使用postgresql， cache是使用redis。  
 cache 的部分主要用在 get active ads 的時候，由於該api 會被大量呼叫，所以需要cache來加速查詢。  
 尤其同時間active的ad數量不會超過1000筆，非常適合拿來cache。選擇使用redis而不是in mem cache的原因是，stateless的server更容易scale，若單個server的效能無法達到需求，可以簡單的增加server數量。   
-cache 的方式是cache-aside，會先去查詢redis中上一次更新active ad的時間，如果超過一個小時，就會去postgres中查詢(start time < now + 80min) && now < end time 的所有ad並更新redis。
+cache 的方式是cache-aside，會先去查詢redis中上一次更新active ad的時間，如果超過一個小時，就會去postgres中查詢(start time < (now + cache.Interval+ cache.Tolerance)) && now < end time 的所有ad並更新redis。
 這邊會發現，cache 中存的是現在active 與未來80分鐘內會active的所有 ad，比較有可能會出現問題的地方是如果active ad的active時間非常短，雖然同時不會超過1000筆active，但一小時內可能有上萬筆active ad。  
-不過我推測ad的active時間應該不會太短，所以這部分是不太會出問題的，如果需要調整的話可以將cache valid的時間調短。  
-更新active ad的時候會先acquire lock(redis NX)，更新完後會release來確保一次只有一client更新。
+不過我推測ad的active時間應該不會太短，所以這部分是不太會出問題的，如果需要調整的話可以將cache.Interval的時間調短。  
+更新的步驟為:
+1. try to acquire lock (redis NX)
+2. remove expired ads
+3. get the largest start_at in cache
+4. only insert ads that has start_at larger than the value obtained on 3rd step
+5. release lock  
+
+lock為write lock，透過redis的NX功能實作，這些步驟確保一次只會有一個redis client更新cache，
+由於有tolerance的部分與redis單線程的設計，其他的client可以繼續正常的獲取active中的ads。
+#### Erd
 
 ![erd](https://raw.githubusercontent.com/SpeedReach/dcard-ad-service/main/assets/erd.png)  
 這邊的erd設計算是有點偷吃步，沒有將gender，country，platform各獨立成一個table。優點是查詢與開發的時候可以更快速與方便，缺點是日後如果要新增更多種condition，這個table會很難scale。不過由於這是assignment，之後並不會有新增更多種condition的需求，所以我認為是可以接受的。
@@ -64,8 +74,5 @@ logging & tracing 的部分使用uber 的 zap套件，每次有新的請求時�
 
 ### Testing
 test 分為 unit test與integration test，unit test主要是針對handler與domain logic，integration test則是針對整個api的行為。
-unit test 會使用mock db與cache，integration test則會使用真實的db與cache。 unit test 的db會使用in memory sqlite。
+unit test 會使用mock cache與 in memory sqlite， integration test則會使用真實的cloud db與redis，所以需要設定環境參數。
 
-
-### TODO
-由於stateless 的設計，與採用redis cache，搭配load balancer，若有足夠的硬體可以輕鬆處裡破百萬的請求，但現在凌晨五點了，明天起來再用我的小破電腦跑k6..

@@ -4,13 +4,11 @@ import (
 	"advertise_service/internal/infra/logging"
 	"advertise_service/internal/models"
 	"context"
-	"encoding/json"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"strings"
 	"testing"
 	"time"
 )
@@ -20,11 +18,14 @@ type Service interface {
 	CheckCacheValid(ctx context.Context) (bool, error)
 	// GetActiveAds retrieves active ads with params skip and count in a sorted list.
 	GetActiveAds(ctx context.Context, skip int, count int) ([]models.Ad, error)
-	// WriteActiveAd stores an active ad into the cache
+
+	// WriteActiveAd stores an active ad into the cache, used when the create ad is already active.
 	WriteActiveAd(ctx context.Context, ad models.Ad) error
 
-	// WriteActiveAds updates last update time, clears expired ads, and inserts new multiple active ads into cache
-	WriteActiveAds(ctx context.Context, ad []models.Ad) error
+	// Update updates last update time, clears expired ads, and inserts new multiple active ads into cache
+	// NOTICE: This function only writes ad that has a start time greater than the largest start time in the cache
+	Update(ctx context.Context, ad []models.Ad) (int, error)
+
 	// Clear clears the cache, useful for testing
 	Clear(ctx context.Context) error
 }
@@ -49,27 +50,7 @@ func (r redisCacheService) CheckCacheValid(ctx context.Context) (bool, error) {
 }
 
 func (r redisCacheService) GetActiveAds(ctx context.Context, skip int, count int) ([]models.Ad, error) {
-	adStrings, err := r.inner.ZRange(ctx, adsKey, int64(skip), int64(skip+count)).Result()
-	if err != nil {
-		return []models.Ad{}, err
-	}
-
-	ads := make([]models.Ad, 0, len(adStrings))
-	now := time.Now().UTC()
-	for _, adStr := range adStrings {
-		ad := models.Ad{}
-		err := json.NewDecoder(strings.NewReader(adStr)).Decode(&ad)
-		if err != nil {
-			return ads, err
-		}
-
-		//cache may contain non-active ads, so we need to filter them out
-		if ad.StartAt.Before(now) && ad.EndAt.After(now) {
-			ads = append(ads, ad)
-		}
-	}
-
-	return ads, nil
+	return getAdsFromRedis(ctx, r.inner, skip, count)
 }
 
 func (r redisCacheService) WriteActiveAd(ctx context.Context, ad models.Ad) error {
@@ -80,8 +61,8 @@ func (r redisCacheService) Clear(ctx context.Context) error {
 	return r.inner.Del(ctx, lastUpdateKey, adsKey).Err()
 }
 
-func (r redisCacheService) WriteActiveAds(ctx context.Context, ads []models.Ad) error {
-	return storeActiveAds(ctx, r.inner, ads)
+func (r redisCacheService) Update(ctx context.Context, ads []models.Ad) (int, error) {
+	return updateCache(ctx, r.inner, ads)
 }
 
 func TestCacheService(t *testing.T, service Service) {
@@ -120,16 +101,17 @@ func TestCacheService(t *testing.T, service Service) {
 		assert.Equal(t, ad.ID, activeAds[0].ID)
 		assert.Equal(t, ad.Conditions, activeAds[0].Conditions)
 	})
+	service.Clear(ctx)
 
-	t.Run("WriteActiveAds", func(t *testing.T) {
-		err := service.Clear(context.Background())
+	t.Run("Update", func(t *testing.T) {
 		assert.NoError(t, err)
 		//write many
 		ads := []models.Ad{
 			{
-				ID:    uuid.New(),
-				Title: "title1",
-				EndAt: time.Now().UTC().Add(2 * time.Hour),
+				ID:      uuid.New(),
+				Title:   "title1",
+				StartAt: time.Now().UTC().Add(-2 * time.Hour),
+				EndAt:   time.Now().UTC().Add(2 * time.Hour),
 				Conditions: []models.Condition{
 					{
 						AgeStart: 20,
@@ -147,14 +129,16 @@ func TestCacheService(t *testing.T, service Service) {
 				},
 			},
 			{
-				ID:    uuid.New(),
-				Title: "title2",
-				EndAt: time.Now().UTC().Add(1 * time.Hour),
+				ID:      uuid.New(),
+				StartAt: time.Now().UTC().Add(-2 * time.Hour),
+				Title:   "title2",
+				EndAt:   time.Now().UTC().Add(1 * time.Hour),
 			},
 		}
 
-		err = service.WriteActiveAds(ctx, ads)
+		writeCount, err := service.Update(ctx, ads)
 		require.NoError(t, err)
+		assert.Equal(t, 2, writeCount)
 
 		valid, err = service.CheckCacheValid(ctx)
 		assert.NoError(t, err)
@@ -173,6 +157,10 @@ func TestCacheService(t *testing.T, service Service) {
 		assert.Equal(t, activeAds[1].Conditions[0].Gender[0], models.Male)
 		assert.Equal(t, activeAds[1].Conditions[0].AgeStart, 20)
 		assert.Equal(t, activeAds[1].Conditions[0].AgeEnd, 30)
+
+		//write second time
+		writeCount, err = service.Update(ctx, ads)
+		assert.Equal(t, writeCount, 0)
 	})
 
 }

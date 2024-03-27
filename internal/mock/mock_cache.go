@@ -7,6 +7,7 @@ import (
 	"advertise_service/internal/models"
 	"context"
 	"slices"
+	"time"
 )
 
 type mockCache struct {
@@ -51,8 +52,27 @@ func (c mockCache) WriteActiveAd(ctx context.Context, ad models.Ad) error {
 	return nil
 }
 
-// WriteActiveAds stores multiple active ads into mockCache
-func (c mockCache) WriteActiveAds(ctx context.Context, ad []models.Ad) error {
+// Update stores multiple active ads into mockCache
+func (c mockCache) Update(ctx context.Context, ad []models.Ad) (int, error) {
+	slices.DeleteFunc(c.inner.ads, func(a models.Ad) bool {
+		return a.EndAt.Before(time.Now().UTC())
+	})
+
+	var largestStart time.Time = time.Unix(0, 0)
+	if len(c.inner.ads) != 0 {
+		largestStart = slices.MaxFunc(c.inner.ads, func(a, b models.Ad) int {
+			if a.EndAt.After(b.EndAt) {
+				return 1
+			} else {
+				return -1
+			}
+		}).StartAt
+	}
+
+	ad = slices.DeleteFunc(ad, func(a models.Ad) bool {
+		return !a.StartAt.After(largestStart)
+	})
+
 	c.inner.ads = append(c.inner.ads, ad...)
 	slices.SortFunc(c.inner.ads, func(a, b models.Ad) int {
 		if a.EndAt.After(b.EndAt) {
@@ -61,5 +81,6 @@ func (c mockCache) WriteActiveAds(ctx context.Context, ad []models.Ad) error {
 			return -1
 		}
 	})
-	return nil
+
+	return len(ad), nil
 }

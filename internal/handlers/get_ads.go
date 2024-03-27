@@ -38,6 +38,7 @@ type item struct {
 }
 
 func GetAdsHandler(writer http.ResponseWriter, request *http.Request) {
+	logger := request.Context().Value(logging.LoggerContextKey{}).(*zap.Logger)
 	reqParams, err := ParseGetAdsRequest(request)
 	if err != nil {
 		logger.Log(zap.ErrorLevel, "bad request", zap.Error(err))
@@ -102,6 +103,7 @@ func fetchMatched(ctx context.Context, reqParams GetAdsRequest) (GetAdsResponse,
 
 // get active ads with cache aside method
 func getActiveAdsCacheAside(ctx context.Context, cacheService cache.Service, db persistent.Storage, skip int, count int) ([]models.Ad, error) {
+	logger := ctx.Value(logging.LoggerContextKey{}).(*zap.Logger)
 	valid, err := cacheService.CheckCacheValid(ctx)
 	if err != nil {
 		logger.Log(zap.ErrorLevel, "error checking cache valid", zap.Error(err))
@@ -117,15 +119,20 @@ func getActiveAdsCacheAside(ctx context.Context, cacheService cache.Service, db 
 			logger.Log(zap.ErrorLevel, "error retrieving ads from database", zap.Error(err))
 			return []models.Ad{}, err
 		}
-		err = cacheService.WriteActiveAds(ctx, ads)
-		//since we fetch ads that will start in the future too, we need to filter them out before returning to the client
-		ads = slices.DeleteFunc(ads, func(ad models.Ad) bool {
-			return ad.StartAt.After(now)
-		})
-		return ads[min(skip, len(ads)):min(skip+count, len(ads))], err
+		_, err = cacheService.Update(ctx, ads)
+		if err == nil {
+			//since we fetch ads that will start in the future too, we need to filter them out before returning to the client
+			ads = slices.DeleteFunc(ads, func(ad models.Ad) bool {
+				return ad.StartAt.After(now)
+			})
+			return ads[min(skip, len(ads)):min(skip+count, len(ads))], err
+		} else {
+			//Update may fail if someone else is acquiring the write lock
+			//we can still read from the older cache, so we just log the error and fall through
+			logger.Log(zap.ErrorLevel, "error writing active ads to cache, someone else might be acquiring the write lock, reading from older cache instead", zap.Error(err))
+		}
 	}
 
-	logger.Log(zap.DebugLevel, "cache is valid, fetching from cache")
 	return cacheService.GetActiveAds(ctx, skip, count)
 }
 

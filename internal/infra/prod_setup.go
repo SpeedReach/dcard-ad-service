@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/redis/go-redis/v9"
+	"log"
 )
 
 func ProductionSetup(config Config) (persistent.Storage, cache.Service) {
@@ -19,5 +20,15 @@ func ProductionSetup(config Config) (persistent.Storage, cache.Service) {
 	if err != nil {
 		panic(err)
 	}
+	err = db.Ping()
+	if err != nil {
+		panic(err)
+	}
+
+	if config.AutoMigration {
+		log.Print("Running auto migration")
+		persistent.CreateTables(db)
+	}
+
 	return persistent.NewSQLDatabase(db), cache.NewRedisCacheService(redisClient)
 }
