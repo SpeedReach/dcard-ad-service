@@ -73,8 +73,8 @@ sql 使用 golang 內建的 sql package 搭配 pgx driver，用純sql的方式�
 logging & tracing 的部分使用uber 的 zap套件，每次有新的請求時，會生成一組request id 方便debug跟日誌查詢
 
 ### Testing
-一般的 test 不需要環境參數就能跑，test_all 會需要環境參數，主要是測試redis部分的code有無問題。
-跑unit test時會使用in memory sqlite 跟 mock cache。integration test的部分需要額外的環境建設，這邊就暫時不做。
+一般的 test 不需要環境參數就能跑，一般的test會使用in memory sqlite 跟 mock cache。
+test_all 則會多測試redis code的部分，所以需要環境參數的設定。
 
 ### Time Domain
 Uses UTC time across the project, to simplify the process of handling different time zone.
