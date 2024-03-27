@@ -4,8 +4,10 @@ package mock
 
 import (
 	"advertise_service/internal/infra/cache"
+	"advertise_service/internal/infra/logging"
 	"advertise_service/internal/models"
 	"context"
+	"go.uber.org/zap"
 	"slices"
 	"time"
 )
@@ -54,11 +56,13 @@ func (c mockCache) WriteActiveAd(ctx context.Context, ad models.Ad) error {
 
 // Update stores multiple active ads into mockCache
 func (c mockCache) Update(ctx context.Context, ad []models.Ad) (int, error) {
-	slices.DeleteFunc(c.inner.ads, func(a models.Ad) bool {
+	logger := ctx.Value(logging.LoggerContextKey{}).(*zap.Logger)
+	c.inner.ads = slices.DeleteFunc(c.inner.ads, func(a models.Ad) bool {
 		return a.EndAt.Before(time.Now().UTC())
 	})
 
-	var largestStart time.Time = time.Unix(0, 0)
+	var largestStart time.Time = time.Unix(0, 0).UTC()
+
 	if len(c.inner.ads) != 0 {
 		largestStart = slices.MaxFunc(c.inner.ads, func(a, b models.Ad) int {
 			if a.EndAt.After(b.EndAt) {
