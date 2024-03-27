@@ -4,10 +4,8 @@ package mock
 
 import (
 	"advertise_service/internal/infra/cache"
-	"advertise_service/internal/infra/logging"
 	"advertise_service/internal/models"
 	"context"
-	"go.uber.org/zap"
 	"slices"
 	"time"
 )
@@ -56,7 +54,6 @@ func (c mockCache) WriteActiveAd(ctx context.Context, ad models.Ad) error {
 
 // Update stores multiple active ads into mockCache
 func (c mockCache) Update(ctx context.Context, ad []models.Ad) (int, error) {
-	logger := ctx.Value(logging.LoggerContextKey{}).(*zap.Logger)
 	c.inner.ads = slices.DeleteFunc(c.inner.ads, func(a models.Ad) bool {
 		return a.EndAt.Before(time.Now().UTC())
 	})
