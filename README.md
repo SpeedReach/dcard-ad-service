@@ -11,7 +11,7 @@ Uses makefile to build and test the project
 ```
 make all => build to build dir
 make test => run unit tests
-make test_all => run all tests including integration tests, requires env vars to be set
+make test_all => run all tests, requires env vars to be set
 ```
 
 ## Environment Variables
