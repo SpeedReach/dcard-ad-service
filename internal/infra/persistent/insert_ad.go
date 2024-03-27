@@ -10,14 +10,7 @@ import (
 
 func (db database) InsertAd(ctx context.Context, ad models.Ad) error {
 	logger := ctx.Value(logging.LoggerContextKey{}).(*zap.Logger)
-	stmt, err := db.inner.PrepareContext(ctx, "INSERT INTO Ads (id, title, start_at, end_at) VALUES ($1, $2, $3, $4)")
-	if err != nil {
-		logger.Log(zap.ErrorLevel, "Could not prepare context for insert ad", zap.Error(err))
-		return err
-	}
-	defer stmt.Close()
-
-	_, err = stmt.ExecContext(ctx, ad.ID, ad.Title, ad.StartAt, ad.EndAt)
+	_, err := db.inner.ExecContext(ctx, "INSERT INTO Ads (id, title, start_at, end_at) VALUES ($1, $2, $3, $4)", ad.ID, ad.Title, ad.StartAt, ad.EndAt)
 	if err != nil {
 		logger.Log(zap.ErrorLevel, "Could not execute context for insert ad", zap.Error(err))
 		return err
