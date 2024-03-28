@@ -77,4 +77,4 @@ logging & tracing 的部分使用uber 的 zap套件，每次有新的請求時�
 test_all 則會多測試redis code的部分，所以需要環境參數的設定。
 
 ### Time Domain
-Uses UTC time across the project, to simplify the process of handling different time zone.
+Uses UTC time across the project, to eliminate the pain of handling different time zone.
