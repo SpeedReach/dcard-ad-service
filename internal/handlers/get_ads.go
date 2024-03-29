@@ -119,18 +119,18 @@ func getActiveAdsCacheAside(ctx context.Context, cacheService cache.Service, db 
 			logger.Log(zap.ErrorLevel, "error retrieving ads from database", zap.Error(err))
 			return []models.Ad{}, err
 		}
+
 		_, err = cacheService.Update(ctx, ads)
-		if err == nil {
-			//since we fetch ads that will start in the future too, we need to filter them out before returning to the client
-			ads = slices.DeleteFunc(ads, func(ad models.Ad) bool {
-				return ad.StartAt.After(now)
-			})
-			return ads[min(skip, len(ads)):min(skip+count, len(ads))], err
-		} else {
+		if err != nil {
 			//Update may fail if someone else is acquiring the write lock
-			//we can still read from the older cache, so we just log the error and fall through
+			//we don't have to handle it, just return the result we fetched from database instead.
 			logger.Log(zap.ErrorLevel, "error writing active ads to cache, someone else might be acquiring the write lock, reading from older cache instead", zap.Error(err))
 		}
+		//since we fetch ads that will start in the future too, we need to filter them out before returning to the client
+		ads = slices.DeleteFunc(ads, func(ad models.Ad) bool {
+			return ad.StartAt.After(now)
+		})
+		return ads[min(skip, len(ads)):min(skip+count, len(ads))], err
 	}
 
 	return cacheService.GetActiveAds(ctx, skip, count)
