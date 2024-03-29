@@ -69,11 +69,11 @@ lock為write lock，透過redis的NX功能實作，這些步驟確保一次只�
 
 ### Libraries
 http server 使用golang 內建，無使用框架  
-sql 使用 golang 內建的 sql package 搭配 pgx driver，用純sql的方式寫，不使用orm
+sql 使用 golang 內建的 sql package 搭配 pgx driver，用純sql的方式寫，不使用orm  
 logging & tracing 的部分使用uber 的 zap套件，每次有新的請求時，會生成一組request id 方便debug跟日誌查詢
 
 ### Testing
-一般的 test 不需要環境參數就能跑，一般的test會使用in memory sqlite 跟 mock cache。
+一般的 test 不需要環境參數就能跑，一般的test會使用in memory sqlite 跟 mock cache。  
 test_all 則會多測試redis code的部分，所以需要環境參數的設定。
 
 ### Time Domain
