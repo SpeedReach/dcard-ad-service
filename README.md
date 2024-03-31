@@ -78,3 +78,6 @@ test_all 則會多測試redis code的部分，所以需要環境參數的設定�
 
 ### Time Domain
 Uses UTC time across the project, to eliminate the pain of handling different time zone.
+
+## Performance
+由於Stateless Service的設計，可搭配load balancer輕鬆超過10000 rps。
